@@ -1,17 +1,22 @@
 package pl.edu.lab4.gpsareadetector;
 
 import androidx.annotation.RequiresApi;
-import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Criteria;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Looper;
+import android.provider.Settings;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.widget.Button;
@@ -20,31 +25,30 @@ import android.widget.Toast;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofencingClient;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.LocationSource;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
-
-import java.util.Objects;
 
 public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLocationButtonClickListener,
         GoogleMap.OnMyLocationClickListener,
-        OnMapReadyCallback {
+        OnMapReadyCallback, LocationListener {
 
 
     public static final int REQUEST_LOCATION = 97;
     private GoogleMap mMap;
-    private GeofencingClient geofencingClient;
-    private Geofence area;
     private LocationManager mLocationMan;
-    private Location location;
-    private double latitude;
-    private double longitude;
+    private String provider;
+    private Location myLocation;
+    private Location areaCenter;
     private static final int RADIUS = 150;
+    private boolean layerActive = false;
 
 
+
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -54,7 +58,33 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         mapFragment.getMapAsync(this);
 
         mLocationMan = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        geofencingClient = LocationServices.getGeofencingClient(this);
+        boolean gpsEnabled = mLocationMan.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+        // check if GPS is enabled and if not send user to the GSP settings
+        if (!gpsEnabled) {
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            startActivity(intent);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // system OS > marshmallow
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                //requesting permission
+                String[] permission = {Manifest.permission.ACCESS_FINE_LOCATION};
+                //show popup to request permissions
+                requestPermissions(permission, REQUEST_LOCATION);
+            } else {
+                //permission already granted
+                getCurrentLocation();
+                mLocationMan.requestLocationUpdates(provider, 400, 1, this);
+            }
+        }
+        else {
+            //system OS < marshmallow
+            //permission already granted
+            getCurrentLocation();
+            mLocationMan.requestLocationUpdates(provider, 400, 1, this);
+        };
 
     }
 
@@ -63,7 +93,7 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         mMap = googleMap;
 
         // Pad the map controls to make room for the button - note that the button may not have
-// been laid out yet.
+        // been laid out yet.
         final Button button = findViewById(R.id.checkout_button);
         button.getViewTreeObserver().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -75,7 +105,7 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         );
         button.setOnClickListener(new View.OnClickListener() {
             public void onClick(View arg0) {
-                setGeofence();
+                setArea();
             }
 
         });
@@ -103,18 +133,31 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         mMap.setMyLocationEnabled(true);
         mMap.setOnMyLocationButtonClickListener(this);
         mMap.setOnMyLocationClickListener(this);
+        layerActive=true;
     }
 
-    public void setGeofence() {
-        area = new Geofence.Builder()
-                // Set the request ID of the geofence. This is a string to identify this
-                // geofence.
-                .setRequestId("1")
-                .setCircularRegion(latitude, longitude, RADIUS)
-                .setExpirationDuration(Geofence.NEVER_EXPIRE)
-                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER | Geofence.GEOFENCE_TRANSITION_EXIT)
-                .build();
-        Toast.makeText(this, "Current geofence stats:\n" + latitude + " " + longitude, Toast.LENGTH_LONG).show();
+    public void setArea() {
+        double latitude = myLocation.getLatitude();
+        double longitude = myLocation.getLongitude();
+
+        //sets center of area in myLocation
+        areaCenter = myLocation;
+        Toast.makeText(this, "Current geofence stats:\n" + areaCenter.getLatitude() + " " + areaCenter.getLongitude(), Toast.LENGTH_LONG).show();
+
+        CircleOptions areaCircle = new CircleOptions()
+                .center( new LatLng(latitude, longitude) )
+                .radius( RADIUS )
+                .fillColor(0x40ff0000)
+                .strokeColor(Color.TRANSPARENT)
+                .strokeWidth(2);
+        mMap.addCircle(areaCircle);
+    }
+
+    public void isInsideArea( ) {
+        float distance = myLocation.distanceTo(areaCenter);
+        if( distance <= RADIUS){
+
+        }
     }
 
     @Override
@@ -122,16 +165,11 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         Toast.makeText(this, "Current location:\n" + location, Toast.LENGTH_LONG).show();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     @Override
     public boolean onMyLocationButtonClick() {
-        Toast.makeText(this, "MyLocation button clicked", Toast.LENGTH_SHORT).show();
+       // Toast.makeText(this, "MyLocation button clicked", Toast.LENGTH_SHORT).show();
         //gets and saves my current location
-
-        return false;
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
-    public void getCurrentLocation(){
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // system OS > marshmallow
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -141,28 +179,30 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
                 requestPermissions(permission, REQUEST_LOCATION);
             } else {
                 //permission already granted
-                location = mLocationMan.getLastKnownLocation(mLocationMan.GPS_PROVIDER);
-                assert location != null;
-                Criteria criteria = new Criteria();
-                criteria.setAccuracy(Criteria.ACCURACY_COARSE);
-                String provider = mLocationMan.getBestProvider(criteria, true);
-                location = mLocationMan.getLastKnownLocation(provider);
-
-                latitude = location.getLatitude();
-                longitude = location.getLongitude();
+             getCurrentLocation();
             }
         } else {
             //system OS < marshmallow
             //permission already granted
-            Criteria criteria = new Criteria();
-            Location location = mLocationMan.getLastKnownLocation(Objects.requireNonNull(mLocationMan.getBestProvider(criteria, false)));
-            assert location != null;
-            latitude = location.getLatitude();
-            longitude = location.getLongitude();
+           getCurrentLocation();
+        };
+        return false;
+    }
 
-            Toast.makeText(this, "Here's the data..."+ latitude + "/"+ longitude, Toast.LENGTH_SHORT).show();
-        }
-        ;
+    @SuppressLint("MissingPermission")
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+    private void getCurrentLocation(){
+
+                Criteria criteria = new Criteria();
+                criteria.setAccuracy(Criteria.ACCURACY_COARSE);
+                provider = mLocationMan.getBestProvider(criteria, true);
+                myLocation = mLocationMan.getLastKnownLocation(provider);
+
+
+                double latitude = myLocation.getLatitude();
+                double longitude = myLocation.getLongitude();
+              //  Toast.makeText(this, "Here's the data..."+ latitude + "/"+ longitude, Toast.LENGTH_SHORT).show();
+
     }
 
     @Override
@@ -180,4 +220,52 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
 
         }
     }
+
+    @SuppressLint("MissingPermission")
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if(layerActive) {
+            mMap.setMyLocationEnabled(true);
+            mLocationMan.requestLocationUpdates(provider, 400, 1, this);
+        }
+    }
+
+    @Override
+    public void onPause() {
+        if(layerActive) {
+            mMap.setMyLocationEnabled(false);
+            mLocationMan.removeUpdates(this);
+        }
+        super.onPause();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+    @Override
+    public void onLocationChanged(Location location) {
+        getCurrentLocation();
+        if(areaCenter!=null) {
+            float distance = myLocation.distanceTo(areaCenter);
+            if (distance > RADIUS) {
+                Toast.makeText(this, "LOCATION OUTSIDE AREA", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+
+    }
+
+    @Override
+    public void onProviderEnabled(String provider) {
+
+    }
+
+    @Override
+    public void onProviderDisabled(String provider) {
+
+    }
 }
+
+
