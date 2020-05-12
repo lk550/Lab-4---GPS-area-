@@ -1,4 +1,4 @@
-package pl.edu.lab4.gpsareadetector;
+package pl.edu.lab4.i256991;
 
 import android.content.Context;
 
@@ -22,6 +22,6 @@ public class ExampleInstrumentedTest {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        assertEquals("pl.edu.lab4.gpsareadetector", appContext.getPackageName());
+        assertEquals("pl.edu.lab4.pl.edu.lab4.i256991", appContext.getPackageName());
     }
 }

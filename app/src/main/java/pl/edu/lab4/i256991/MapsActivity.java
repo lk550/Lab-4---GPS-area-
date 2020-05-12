@@ -1,4 +1,4 @@
-package pl.edu.lab4.gpsareadetector;
+package pl.edu.lab4.i256991;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
