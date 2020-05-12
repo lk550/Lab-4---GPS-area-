@@ -1,6 +1,8 @@
 package pl.edu.lab4.gpsareadetector;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
 import android.Manifest;
@@ -15,18 +17,13 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.Toast;
 
-import com.google.android.gms.location.Geofence;
-import com.google.android.gms.location.GeofencingClient;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.LocationSource;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CircleOptions;
@@ -55,9 +52,11 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         setContentView(R.layout.activity_maps);
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
+        assert mapFragment != null;
         mapFragment.getMapAsync(this);
 
         mLocationMan = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        assert mLocationMan != null;
         boolean gpsEnabled = mLocationMan.isProviderEnabled(LocationManager.GPS_PROVIDER);
 
         // check if GPS is enabled and if not send user to the GSP settings
@@ -84,7 +83,7 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
             //permission already granted
             getCurrentLocation();
             mLocationMan.requestLocationUpdates(provider, 400, 1, this);
-        };
+        }
 
     }
 
@@ -106,6 +105,8 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         button.setOnClickListener(new View.OnClickListener() {
             public void onClick(View arg0) {
                 setArea();
+                //disable button to prevent adding more areas since the app only requested the detection of a single area
+                button.setEnabled(false);
             }
 
         });
@@ -125,7 +126,6 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
             //system OS < marshmallow
             setLocationLayer();
         }
-        ;
 
     }
 
@@ -142,7 +142,6 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
 
         //sets center of area in myLocation
         areaCenter = myLocation;
-        Toast.makeText(this, "Current geofence stats:\n" + areaCenter.getLatitude() + " " + areaCenter.getLongitude(), Toast.LENGTH_LONG).show();
 
         CircleOptions areaCircle = new CircleOptions()
                 .center( new LatLng(latitude, longitude) )
@@ -151,17 +150,14 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
                 .strokeColor(Color.TRANSPARENT)
                 .strokeWidth(2);
         mMap.addCircle(areaCircle);
+
+        Toast.makeText(this, "Area created with center at: \n (" + areaCenter.getLatitude() + " , " + areaCenter.getLongitude() + ")", Toast.LENGTH_LONG).show();
+
     }
 
-    public void isInsideArea( ) {
-        float distance = myLocation.distanceTo(areaCenter);
-        if( distance <= RADIUS){
-
-        }
-    }
 
     @Override
-    public void onMyLocationClick(Location location) {
+    public void onMyLocationClick(@NonNull Location location) {
         Toast.makeText(this, "Current location:\n" + location, Toast.LENGTH_LONG).show();
     }
 
@@ -185,7 +181,7 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
             //system OS < marshmallow
             //permission already granted
            getCurrentLocation();
-        };
+        }
         return false;
     }
 
@@ -197,27 +193,16 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
                 criteria.setAccuracy(Criteria.ACCURACY_COARSE);
                 provider = mLocationMan.getBestProvider(criteria, true);
                 myLocation = mLocationMan.getLastKnownLocation(provider);
-
-
-                double latitude = myLocation.getLatitude();
-                double longitude = myLocation.getLongitude();
-              //  Toast.makeText(this, "Here's the data..."+ latitude + "/"+ longitude, Toast.LENGTH_SHORT).show();
-
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           String[] permissions, int[] grantResults) {
-        switch (requestCode) {
-            case REQUEST_LOCATION: {
-                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    setLocationLayer();
-                } else {
-                    Toast.makeText(this, "Please allow the permission...", Toast.LENGTH_SHORT).show();
-                }
-                return;
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == REQUEST_LOCATION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                setLocationLayer();
+            } else {
+                Toast.makeText(this, "Please allow the permission...", Toast.LENGTH_SHORT).show();
             }
-
         }
     }
 
@@ -247,7 +232,12 @@ public class MapsActivity extends FragmentActivity implements GoogleMap.OnMyLoca
         if(areaCenter!=null) {
             float distance = myLocation.distanceTo(areaCenter);
             if (distance > RADIUS) {
-                Toast.makeText(this, "LOCATION OUTSIDE AREA", Toast.LENGTH_SHORT).show();
+                AlertDialog outside_area = new AlertDialog.Builder(this)
+                        .setTitle("You left the area!")
+                        .setMessage("Your location is currently outside the radius of the set area")
+                        .setPositiveButton("OK",null)
+                        .setCancelable(false)
+                        .show();
             }
         }
     }
